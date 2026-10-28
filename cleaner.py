@@ -1,4 +1,5 @@
 import os
+import re
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -20,6 +21,84 @@ DEFAULT_MODELS = [
     "gemini-3.8-flash",
     "gemini-3.7-flash",
 ]
+
+
+def clean_text_with_rules(raw_text: str) -> str:
+    """Fast, 100% offline rule-based cleaner for extracted PDF text.
+
+    Strips page markers, running headers/footers, inline citations,
+    and fixes line-break hyphenations and PDF kerning glitches.
+    """
+    if not raw_text or not raw_text.strip():
+        raise ValueError("Raw text cannot be empty.")
+
+    lines = raw_text.splitlines()
+    cleaned_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            cleaned_lines.append("")
+            continue
+
+        # 1. Remove our internal page boundary markers: --- [Page 20] ---
+        if re.match(r"^---\s*\[Page\s+\d+\]\s*---$", stripped):
+            continue
+
+        # 2. Remove standalone page numbers (Arabic or Roman numerals)
+        if re.match(r"^(\d+|[ivxlcdmIVXLCDM]+)$", stripped):
+            continue
+
+        # 3. Remove common book headers/footers with pipe separators:
+        # e.g. "xiv | Preface", "Preface | xv", "24 | Chapter 1: ..."
+        if re.match(r"^(\d+|[ivxlcdmIVXLCDM]+)\s*\|\s*.+$", stripped) or re.match(
+            r"^.+\s*\|\s*(\d+|[ivxlcdmIVXLCDM]+)$", stripped
+        ):
+            continue
+
+        # 4. Remove figure/table caption headers if they stand alone
+        if re.match(r"^(Figure|Table)\s+\d+[-.]\d+\..*$", stripped):
+            continue
+
+        # 5. Fix trailing duplicate bullet artifacts (e.g. "• some text•")
+        if stripped.startswith("•") and stripped.endswith("•") and len(stripped) > 2:
+            stripped = stripped[:-1].rstrip()
+        elif stripped.endswith("•") and not stripped.startswith("•"):
+            stripped = stripped[:-1].rstrip()
+
+        cleaned_lines.append(stripped)
+
+    text = "\n".join(cleaned_lines)
+
+    # 6. Fix hyphenated words split across line breaks (handles standard '-' and soft/Unicode '‐', '‑', '­')
+    text = re.sub(r"([a-zA-Z])[-\u2010\u2011\u00ad]\s*\n\s*([a-zA-Z])", r"\1\2", text)
+
+    # 7. Fix common PDF capital-letter kerning glitches (e.g. "Y ou" -> "You", "T o" -> "To", "W e" -> "We")
+    text = re.sub(r"\bY\s+ou", "You", text)
+    text = re.sub(r"\bT\s+o\b", "To", text)
+    text = re.sub(r"\bW\s+e\b", "We", text)
+    text = re.sub(r"\s+([,.;:?!])", r"\1", text)
+
+    # 8. Remove bracketed numeric citations like [1], [12, 15]
+    text = re.sub(r"\s*\[\d+(?:\s*,\s*\d+)*\]", "", text)
+
+    # 9. Unwrap single line breaks within paragraphs while keeping paragraph breaks (\n\n) and bullets
+    paragraphs = re.split(r"\n\s*\n", text)
+    merged_paragraphs = []
+    for para in paragraphs:
+        para_lines = [ln.strip() for ln in para.splitlines() if ln.strip()]
+        if not para_lines:
+            continue
+        # Keep bullet lists on separate lines, otherwise join wrapped lines with spaces
+        rebuilt = []
+        for ln in para_lines:
+            if ln.startswith(("•", "-", "*")) or not rebuilt:
+                rebuilt.append(ln)
+            else:
+                rebuilt[-1] = f"{rebuilt[-1]} {ln}"
+        merged_paragraphs.append("\n".join(rebuilt))
+
+    return "\n\n".join(merged_paragraphs).strip()
 
 
 def get_api_key() -> str:
@@ -72,3 +151,12 @@ def clean_text_with_llm(raw_text: str, model: str | None = None) -> str:
             continue
 
     raise RuntimeError(f"Failed to clean text with Gemini: {last_error}")
+
+
+def clean_text(raw_text: str, mode: str = "rules") -> str:
+    """Clean raw PDF text using the chosen mode ('rules' or 'gemini')."""
+    if mode == "rules":
+        return clean_text_with_rules(raw_text)
+    if mode == "gemini":
+        return clean_text_with_llm(raw_text)
+    raise ValueError(f"Unknown cleaning mode: {mode}")

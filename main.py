@@ -1,6 +1,6 @@
 import argparse
 import os
-from cleaner import clean_text_with_llm
+from cleaner import clean_text
 from db import build_recording_path, get_cached_recording, save_recording
 from pdf_parser import extract_text_from_pdf
 from tts import DEFAULT_VOICE, text_to_speech
@@ -15,6 +15,7 @@ def pdf_to_audio(
     rate: str = "+0%",
     pdf_name: str | None = None,
     force_regenerate: bool = False,
+    clean_mode: str = "rules",
 ) -> tuple[str, str, bool]:
     """Full pipeline with SQLite caching: check DB first, otherwise extract, clean, TTS, and save.
 
@@ -32,7 +33,7 @@ def pdf_to_audio(
     if not raw_text.strip():
         raise ValueError(f"No readable text found on pages {start_page}-{end_page}.")
 
-    cleaned_text = clean_text_with_llm(raw_text)
+    cleaned_text = clean_text(raw_text, mode=clean_mode)
     target_path = output_path or build_recording_path(book_name, start_page, end_page)
     audio_path = text_to_speech(
         text=cleaned_text,
@@ -52,10 +53,16 @@ if __name__ == "__main__":
     parser.add_argument("--output", default=None, help="Optional custom output MP3 path")
     parser.add_argument("--voice", default=DEFAULT_VOICE, help="Edge TTS voice name")
     parser.add_argument("--rate", default="+0%", help="Speech rate (e.g. '+20%%')")
+    parser.add_argument(
+        "--cleaner",
+        choices=["rules", "gemini"],
+        default="rules",
+        help="Text cleaning method: 'rules' (instant offline regex) or 'gemini' (LLM API)",
+    )
     parser.add_argument("--force", action="store_true", help="Ignore SQLite cache and regenerate")
 
     args = parser.parse_args()
-    print(f"Processing '{args.pdf_path}' (pages {args.start} to {args.end})...")
+    print(f"Processing '{args.pdf_path}' (pages {args.start} to {args.end}) using '{args.cleaner}' cleaner...")
     out_file, _, is_cached = pdf_to_audio(
         pdf_path=args.pdf_path,
         start_page=args.start,
@@ -64,6 +71,7 @@ if __name__ == "__main__":
         voice=args.voice,
         rate=args.rate,
         force_regenerate=args.force,
+        clean_mode=args.cleaner,
     )
     status_msg = "Loaded from SQLite cache" if is_cached else "Generated and saved"
     print(f"Done! ({status_msg}) Audio path: {out_file}")

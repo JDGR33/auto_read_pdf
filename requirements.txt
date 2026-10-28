@@ -3,3 +3,8 @@ pypdf>=4.0.0
 google-genai>=1.0.0
 python-dotenv>=1.0.0
 streamlit>=1.35.0
+piper-tts>=1.2.0
+kokoro-onnx>=0.4.0
+onnxruntime-gpu[cuda,cudnn]==1.26.0
+nvidia-cublas-cu12
+soundfile>=0.12.0

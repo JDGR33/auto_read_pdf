@@ -1,6 +1,9 @@
 # Local
 library/
+recordings/
+models/
 *.mp3
+*.wav
 *.db
 
 # Byte-compiled / optimized / DLL files
