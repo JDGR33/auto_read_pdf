@@ -24,9 +24,9 @@ A minimal, straightforward tool to convert a specific page range of a PDF file i
 
 - [x] **Step 1: Text-to-Speech (TTS) Module (`tts.py`)**
   - Built [`text_to_speech`](file:///home/julio/auto_read_pdf/tts.py#L12-L33) using `edge-tts` (free, zero API keys needed, natural neural voices, adjustable speed).
-- [ ] **Step 2: PDF Extraction & LLM Cleaning (`pdf_parser.py` & `cleaner.py`)**
-  - Extract raw text from a given start/end page range using `pypdf`.
-  - Pass page text through an LLM API (e.g., Gemini Flash or OpenAI GPT-4o-mini) with a strict system prompt to strip out page numbers, headers/footers, citations, footnotes, and image/table descriptions while keeping the main body text intact.
+- [x] **Step 2: PDF Extraction & LLM Cleaning (`pdf_parser.py` & `cleaner.py`)**
+  - Built [`extract_text_from_pdf`](file:///home/julio/auto_read_pdf/pdf_parser.py#L4-L28) using `pypdf` to extract raw text from a 1-based inclusive page range.
+  - Built [`clean_text_with_llm`](file:///home/julio/auto_read_pdf/cleaner.py#L40-L71) using the Google Gemini API (`google-genai`) to strip out page numbers, headers/footers, footnotes, and broken hyphenations while keeping the main body text verbatim.
 - [ ] **Step 3: CLI Pipeline (`main.py`)**
   - Tie the modules together: take a PDF path, start page, end page, and output filename from the command line.
 - [ ] **Step 4: Simple UI (`app.py`)**
