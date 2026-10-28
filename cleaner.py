@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 from google import genai
-from google.genai import errors, types
+from google.genai import types
 
 load_dotenv()
 
@@ -16,10 +16,9 @@ Your ONLY job is to output the clean, readable main body text verbatim while rem
 6. Return ONLY the cleaned text ready to be spoken aloud."""
 
 DEFAULT_MODELS = [
+    "gemini-3.5-flash",
     "gemini-3.8-flash",
     "gemini-3.7-flash",
-    "gemini-3.5-flash",
-    "gemini-flash-lite-latest",
 ]
 
 
@@ -63,11 +62,12 @@ def clean_text_with_llm(raw_text: str, model: str | None = None) -> str:
                 config=types.GenerateContentConfig(
                     system_instruction=SYSTEM_PROMPT,
                     temperature=0.0,
+                    thinking_config=types.ThinkingConfig(thinking_budget=0),
                 ),
             )
-            if response.text:
+            if response.text and response.text.strip():
                 return response.text.strip()
-        except errors.ServerError as exc:
+        except Exception as exc:
             last_error = exc
             continue
 

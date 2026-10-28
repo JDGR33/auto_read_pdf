@@ -1,12 +1,31 @@
 import asyncio
+import re
 import edge_tts
+from edge_tts.exceptions import NoAudioReceived
 
 DEFAULT_VOICE = "en-US-AndrewNeural"
 
 
+def _sanitize_for_tts(text: str) -> str:
+    """Clean up characters or empty lines that can cause edge-tts NoAudioReceived."""
+    # Remove control characters except newlines and tabs
+    cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", text)
+    # Collapse excessive newlines/whitespace
+    cleaned = re.sub(r"\n{3,}", "\n\n", cleaned).strip()
+    return cleaned
+
+
 async def _generate_audio(text: str, output_path: str, voice: str, rate: str) -> None:
-    communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate)
-    await communicate.save(output_path)
+    last_err = None
+    for attempt in range(3):
+        try:
+            communicate = edge_tts.Communicate(text=text, voice=voice, rate=rate)
+            await communicate.save(output_path)
+            return
+        except NoAudioReceived as err:
+            last_err = err
+            await asyncio.sleep(1.0 * (attempt + 1))
+    raise RuntimeError(f"TTS failed after 3 attempts: {last_err}")
 
 
 def text_to_speech(
@@ -26,19 +45,11 @@ def text_to_speech(
     Returns:
         The path to the saved audio file.
     """
-    if not text or not text.strip():
-        raise ValueError("Text cannot be empty.")
+    cleaned_text = _sanitize_for_tts(text or "")
+    if not cleaned_text or not any(ch.isalnum() for ch in cleaned_text):
+        raise ValueError(
+            "No speakable text remained on the selected page(s) (page may be blank or only contain images/headers)."
+        )
 
-    asyncio.run(_generate_audio(text, output_path, voice, rate))
+    asyncio.run(_generate_audio(cleaned_text, output_path, voice, rate))
     return output_path
-
-
-if __name__ == "__main__":
-    sample_text = (
-        "Hello! This is a test of the Auto Read PDF text to speech module. "
-        "Step one is now working."
-    )
-    output_file = "test_output.mp3"
-    print(f"Generating audio to '{output_file}'...")
-    text_to_speech(sample_text, output_file, rate="+10%")
-    print(f"Done! Saved to {output_file}")
